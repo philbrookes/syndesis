@@ -14,15 +14,16 @@ import (
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
 	"github.com/syndesisio/syndesis/install/operator/pkg/stub"
 
-	"github.com/sirupsen/logrus"
 	"flag"
+
+	"github.com/sirupsen/logrus"
 	configuration "github.com/syndesisio/syndesis/install/operator/pkg/syndesis/configuration"
 )
 
 func printVersion() {
 	logrus.Infof("Go Version: %s", runtime.Version())
 	logrus.Infof("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH)
-	logrus.Infof("operator-sdk Version: %v", sdkVersion.Version)
+	logrus.Infof("operatorof the Syndesis infrastructure elements-sdk Version: %v", sdkVersion.Version)
 }
 
 func main() {
@@ -47,6 +48,7 @@ func main() {
 
 	logrus.Infof("Watching %s, %s, %s, %d", resource, kind, namespace, resyncPeriod)
 	sdk.Watch(resource, kind, namespace, resyncPeriod)
+	sdk.Watch("v1", "ConfigMap", "enmasse", resyncPeriod)
 	sdk.Handle(stub.NewHandler())
 	sdk.Run(ctx)
 }

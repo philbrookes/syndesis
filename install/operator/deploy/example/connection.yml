@@ -1,0 +1,10 @@
+apiVersion: syndesis.io/v1alpha1
+kind: Connection
+metadata:
+  name: example
+spec: 
+  type: "enmasse"
+
+status:
+  ready: false
+  
