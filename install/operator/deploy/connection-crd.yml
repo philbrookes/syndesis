@@ -16,5 +16,9 @@ spec:
       properties:
         spec:
           properties:
-            supplier:
+            username:
+              type: string
+            password:
+              type: string
+            url:
               type: string

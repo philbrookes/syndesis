@@ -24,6 +24,7 @@ rules:
   resources:
   - syndesises
   - syndesises/finalizers
+  - connections
   verbs: [ get, list, create, update, delete, deletecollection, watch ]
 - apiGroups:
   - ""

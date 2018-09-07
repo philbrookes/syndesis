@@ -3,38 +3,38 @@ package enmasse
 import (
 	"os"
 
-	glog "github.com/sirupsen/logrus"
-	"k8s.io/api/core/v1"
-
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
-	"github.com/syndesisio/syndesis/install/operator/pkg/apis/syndesis/v1alpha1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	api "github.com/syndesisio/syndesis/install/operator/pkg/apis/syndesis/v1alpha1"
+	"k8s.io/api/core/v1"
 )
 
-// Reconcile the state
-func Reconcile(configmap *v1.ConfigMap, deleted bool) error {
+// ReconcileConfigMap
+func ReconcileConfigMap(configmap *v1.ConfigMap, deleted bool) error {
 	if val, ok := configmap.ObjectMeta.Labels["type"]; ok && val == "address-space-plan" {
-		glog.Infof("Reconciling address-space-plan: '%v'", configmap.ObjectMeta.Name)
 		return reconcileAddressSpacePlan(configmap, deleted)
 	}
 	return nil
 }
 
+// ReconcileConnection
+func ReconcileConnection(connection *api.Connection, deleted bool) error {
+	switch connection.Status.Phase {
+	case "":
+		err := createConnection(connection, os.Getenv("SYNDESIS_SERVER_SERVICE_HOST"))
+		if err != nil {
+			connection.Status.Phase = "failed_creation"
+			connection.Status.Ready = false
+			sdk.Update(connection)
+			return err
+		}
+		connection.Status.Phase = "ready"
+		connection.Status.Ready = true
+		return sdk.Update(connection)
+	}
+
+	return nil
+}
+
 func reconcileAddressSpacePlan(addressSpacePlan *v1.ConfigMap, deleted bool) error {
-	asp := &v1alpha1.Connection{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Connection",
-			APIVersion: "syndesis.io/v1alpha1",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "example",
-			Namespace: os.Getenv("WATCH_NAMESPACE"),
-		},
-	}
-	err := sdk.Get(asp)
-	if err != nil {
-		glog.Infof("getting asp gave error: %v", err.Error())
-		return err
-	}
 	return nil
 }
