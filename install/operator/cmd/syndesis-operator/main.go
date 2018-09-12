@@ -17,7 +17,11 @@ import (
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
 	"github.com/syndesisio/syndesis/install/operator/pkg/stub"
 
+	"github.com/syndesisio/syndesis/install/operator/pkg/syndesis/api"
+
 	"flag"
+
+	"net/http"
 
 	"github.com/sirupsen/logrus"
 	configuration "github.com/syndesisio/syndesis/install/operator/pkg/syndesis/configuration"
@@ -38,6 +42,7 @@ func main() {
 	flag.Parse()
 	logrus.Infof("Using template %s", *configuration.TemplateLocation)
 
+	var host = os.Getenv("SYNDESIS_SERVER_SERVICE_HOST")
 	var token = os.Getenv("SA_TOKEN")
 	if token == "" {
 		//read token from file
@@ -47,6 +52,8 @@ func main() {
 		}
 		token = string(data)
 	}
+
+	SyndesisAPIClient := api.NewClient(token, host, "syndesis-operator", "awesome", http.DefaultClient)
 
 	resource := "syndesis.io/v1alpha1"
 	kind := "Syndesis"
@@ -65,6 +72,6 @@ func main() {
 	if os.Getenv("ENABLE_ENMASSE") != "false" {
 		sdk.Watch("v1", "ConfigMap", namespace, 10*time.Second, sdk.WithLabelSelector("type=address-space"))
 	}
-	sdk.Handle(stub.NewHandler(token))
+	sdk.Handle(stub.NewHandler(SyndesisAPIClient))
 	sdk.Run(ctx)
 }

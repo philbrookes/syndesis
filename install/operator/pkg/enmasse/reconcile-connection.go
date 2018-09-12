@@ -1,17 +1,16 @@
 package enmasse
 
 import (
-	"os"
-
 	"github.com/operator-framework/operator-sdk/pkg/sdk"
-	api "github.com/syndesisio/syndesis/install/operator/pkg/apis/syndesis/v1alpha1"
+	v1alpha1 "github.com/syndesisio/syndesis/install/operator/pkg/apis/syndesis/v1alpha1"
+	"github.com/syndesisio/syndesis/install/operator/pkg/syndesis/api"
 )
 
 // ReconcileConnection
-func ReconcileConnection(connection *api.Connection, deleted bool, token string) error {
+func ReconcileConnection(connection *v1alpha1.Connection, deleted bool, syndesisAPIClient api.Client) error {
 	switch connection.Status.Phase {
 	case "":
-		err := createConnection(connection, os.Getenv("SYNDESIS_SERVER_SERVICE_HOST"), token)
+		err := syndesisAPIClient.CreateConnection(connection)
 		if err != nil {
 			connection.Status.Phase = "failed_creation"
 			connection.Status.Ready = false

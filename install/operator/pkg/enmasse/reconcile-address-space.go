@@ -12,8 +12,6 @@ import (
 	"strings"
 	"time"
 
-	errors2 "k8s.io/apimachinery/pkg/api/errors"
-
 	"github.com/operator-framework/operator-sdk/pkg/k8sclient"
 	"github.com/operator-framework/operator-sdk/pkg/util/k8sutil"
 	"github.com/pkg/errors"
@@ -54,7 +52,6 @@ func reconcileConfigMap(configmap *v1.ConfigMap, deleted bool) error {
 		return sdk.Delete(&conn, sdk.WithDeleteOptions(metav1.NewDeleteOptions(0)))
 	}
 
-	logrus.Infoln("Reconciling connection...")
 	user, pass, err := getKeycloakAdminCredentials()
 	if err != nil {
 		return err
@@ -76,10 +73,7 @@ func reconcileConfigMap(configmap *v1.ConfigMap, deleted bool) error {
 		return err
 	}
 	kcUser, err := createUser(host, token, realm, "testintegration", "password")
-	if err == errExists {
-		logrus.Info("user already exists doing nothing")
 
-	}
 	if err != nil && err != errExists {
 		return err
 	}
@@ -102,9 +96,6 @@ func reconcileConfigMap(configmap *v1.ConfigMap, deleted bool) error {
 	msgHost += "?amqp.saslMechanisms=PLAIN"
 	conn.Spec = syndesis.ConnectionSpec{Password: kcUser.Password, URL: msgHost, Username: kcUser.UserName}
 	if err := sdk.Create(&conn); err != nil {
-		if errors2.IsAlreadyExists(err) {
-			logrus.Info("connection already exists doing nothing")
-		}
 		return err
 	}
 	return nil
@@ -275,7 +266,6 @@ func createUser(host, token, realm, userName, password string) (*User, error) {
 	defer res.Body.Close()
 	kcUser := &User{UserName: userName, Password: password}
 	if res.StatusCode == http.StatusConflict {
-		logrus.Info("user already exists doing nothing")
 		return kcUser, errExists
 
 	}
