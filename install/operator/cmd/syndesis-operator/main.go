@@ -42,7 +42,14 @@ func main() {
 	flag.Parse()
 	logrus.Infof("Using template %s", *configuration.TemplateLocation)
 
-	var host = os.Getenv("SYNDESIS_SERVER_SERVICE_HOST")
+	resource := "syndesis.io/v1alpha1"
+	kind := "Syndesis"
+	namespace, err := k8sutil.GetWatchNamespace()
+	if err != nil {
+		logrus.Fatalf("Failed to get watch namespace: %v", err)
+	}
+
+	var host = "syndesis-server." + namespace + ".svc"
 	var token = os.Getenv("SA_TOKEN")
 	if token == "" {
 		//read token from file
@@ -54,13 +61,6 @@ func main() {
 	}
 
 	SyndesisAPIClient := api.NewClient(token, host, "syndesis-operator", "awesome", http.DefaultClient)
-
-	resource := "syndesis.io/v1alpha1"
-	kind := "Syndesis"
-	namespace, err := k8sutil.GetWatchNamespace()
-	if err != nil {
-		logrus.Fatalf("Failed to get watch namespace: %v", err)
-	}
 
 	ctx := context.TODO()
 
