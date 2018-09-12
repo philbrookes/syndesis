@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	glog "github.com/golang/glog"
+	glog "github.com/sirupsen/logrus"
 	v1alpha1 "github.com/syndesisio/syndesis/install/operator/pkg/apis/syndesis/v1alpha1"
 )
 
@@ -17,67 +17,88 @@ type Client interface {
 type ConnectionCreatePost struct {
 	ConfiguredProperties ConfiguredProperties `json:"configuredProperties"`
 	Name                 string               `json:"name"`
+	Description          string               `json:"description"`
 	Connector            Connector            `json:"connector"`
 	Icon                 string               `json:"icon"`
 	ConnectorID          string               `json:"connectorId"`
 }
 
 type Connector struct {
-	Description      string                `json:"description"`
-	Icon             string                `json:"icon"`
-	ComponentScheme  string                `json:"componentScheme"`
-	ConnectorFactory string                `json:"connectorFactory"`
-	ID               string                `json:"id"`
-	Version          string                `json:"version"`
-	Dependencies     []ConnectorDependency `json:"dependencies"`
-	Actions          []ConnectorAction     `json:"actions"`
+	Tags             []string                     `json:"tags,omitempty"`
+	Uses             int                          `json:"uses"`
+	Description      string                       `json:"description"`
+	Name             string                       `json:"name,omitempty"`
+	Icon             string                       `json:"icon"`
+	ComponentScheme  string                       `json:"componentScheme"`
+	ConnectorFactory string                       `json:"connectorFactory"`
+	ID               string                       `json:"id"`
+	Version          int                          `json:"version"`
+	Dependencies     []ConnectorDependency        `json:"dependencies"`
+	Actions          []ConnectorAction            `json:"actions"`
+	Properties       map[string]ConnectorProperty `json:"properties"`
+	ActionsSummary   ConnectorActionsSummary      `json:"actionsSummary"`
 }
 
+type ConnectorActionsSummary struct {
+	TotalActions int `json:"totalActions"`
+}
 type ConnectorAction struct {
-	ID          string                    `json:""`
-	Name        string                    `json:""`
-	Description string                    `json:""`
+	ID          string                    `json:"id"`
+	Name        string                    `json:"name"`
+	Description string                    `json:"description"`
 	Descriptor  ConnectorActionDescriptor `json:"descriptor"`
 	ActionType  string                    `json:"actionType"`
 	Pattern     string                    `json:"pattern"`
 }
 
-type ConnectorActionDescriptorDataShape struct {
+type ConnectorDataShape struct {
 	Kind string `json:"kind"`
 }
 
-type ConnectorActionDescriptorPropertyEnum struct {
+type ConnectorEnum struct {
 	Label string `json:"label"`
 	Value string `json:"value"`
 }
 
-type ConnectorActionDescriptorPropertyDefinitionStep struct {
-	Description string `json:"description"`
-	Name        string `json:"name"`
-	Properties  map[string]ConnectorActionDescriptorPropertyDefinitionStepProperties
+type ConnectorStep struct {
+	Description string                       `json:"description"`
+	Name        string                       `json:"name"`
+	Properties  map[string]ConnectorProperty `json:"properties"`
 }
 
-type ConnectorActionDescriptorPropertyDefinitionStepProperties struct {
-	ComponentProperty bool                                    `json:"componentProperty,omitempty"`
-	Deprecated        bool                                    `json:"deprecated,omitempty"`
-	LabelHint         string                                  `json:"labelHint,omitempty"`
-	DisplayName       string                                  `json:"displayName,omitempty"`
-	Group             string                                  `json:"group,omitempty"`
-	JavaType          string                                  `json:"javaType,omitempty"`
-	Kind              string                                  `json:"kind,omitempty"`
-	Required          bool                                    `json:"required,omitempty"`
-	Secret            bool                                    `json:"secret,omitempty"`
-	Type              string                                  `json:"type,omitempty"`
-	Order             int                                     `json:"order,omitempty"`
-	DefaultValue      string                                  `json:"defaultValue,omitempty"`
-	Label             string                                  `json:"label,omitempty"`
-	Enum              []ConnectorActionDescriptorPropertyEnum `json:"enum,omitempty"`
+type ConnectorProperty struct {
+	ComponentProperty bool                        `json:"componentProperty"`
+	Deprecated        bool                        `json:"deprecated"`
+	Description       string                      `json:"description,omitempty"`
+	LabelHint         string                      `json:"labelHint,omitempty"`
+	DisplayName       string                      `json:"displayName,omitempty"`
+	Group             string                      `json:"group,omitempty"`
+	JavaType          string                      `json:"javaType,omitempty"`
+	Kind              string                      `json:"kind,omitempty"`
+	Label             string                      `json:"label,omitempty"`
+	Required          bool                        `json:"required"`
+	Secret            bool                        `json:"secret"`
+	Type              string                      `json:"type,omitempty"`
+	Order             int                         `json:"order,omitempty"`
+	Relation          []ConnectorPropertyRelation `json:"relation,omitempty"`
+	Enum              []ConnectorEnum             `json:"enum,omitempty"`
+	DefaultValue      string                      `json:"defaultValue,omitempty"`
+}
+
+type ConnectorPropertyEvent struct {
+	ID    string `json:"id"`
+	Value string `json:"value"`
+}
+
+type ConnectorPropertyRelation struct {
+	Action string                   `json:"action"`
+	When   []ConnectorPropertyEvent `json:"when"`
 }
 
 type ConnectorActionDescriptor struct {
-	InputDataShape          ConnectorActionDescriptorDataShape                `json:"inputDataShape"`
-	OutputDataShape         ConnectorActionDescriptorDataShape                `json:"outputDataShape"`
-	PropertyDefinitionSteps []ConnectorActionDescriptorPropertyDefinitionStep `json:"propertyDefinitionSteps"`
+	InputDataShape          ConnectorDataShape `json:"inputDataShape"`
+	OutputDataShape         ConnectorDataShape `json:"outputDataShape"`
+	PropertyDefinitionSteps []ConnectorStep    `json:"propertyDefinitionSteps"`
 }
 
 type ConnectorDependency struct {
@@ -88,8 +109,8 @@ type ConfiguredProperties struct {
 	ConnectionURI        string `json:"connectionUri"`
 	Username             string `json:"username"`
 	Password             string `json:"password"`
-	SkipCertificateCheck bool   `json:"skipCertificateCheck"`
-	BrokerCertificate    string `json:"brokerCertificate"`
+	SkipCertificateCheck string `json:"skipCertificateCheck"`
+	BrokerCertificate    string `json:"brokerCertificate,omitempty"`
 }
 
 type SyndesisClient struct {
@@ -138,12 +159,9 @@ func (c *SyndesisClient) CreateConnection(connection *v1alpha1.Connection) error
 
 func newConnectionCreatePostBody(username, password, url, connectionName string) (*bytes.Buffer, error) {
 	body := ConnectionCreatePost{
-		Name:        connectionName,
-		Icon:        "fa-amqp",
-		ConnectorID: "amqp",
+		Name: connectionName,
 		ConfiguredProperties: ConfiguredProperties{
-			BrokerCertificate:    "",
-			SkipCertificateCheck: true,
+			SkipCertificateCheck: "true",
 			ConnectionURI:        url,
 			Username:             username,
 			Password:             password,
@@ -153,32 +171,33 @@ func newConnectionCreatePostBody(username, password, url, connectionName string)
 			Icon:             "fa-amqp",
 			ComponentScheme:  "amqp",
 			ConnectorFactory: "io.syndesis.connector.amqp.AMQPConnectorFactory",
-			ID:               "amqp",
-			Version:          "1",
-			Dependencies: []ConnectorDependency{
-				{
-					Type: "MAVEN",
-					ID:   "io.syndesis.connector:connector-amqp:1.5-SNAPSHOT",
-				},
+			Tags: []string{
+				"verifier",
 			},
+			Uses: 0,
+			ActionsSummary: ConnectorActionsSummary{
+				TotalActions: 3,
+			},
+			ID:      "amqp",
+			Version: 3,
 			Actions: []ConnectorAction{
 				{
 					ID:          "io.syndesis:amqp-publish-action",
 					Name:        "Publish messages",
 					Description: "Send data to the destination you specify.",
 					Descriptor: ConnectorActionDescriptor{
-						InputDataShape: ConnectorActionDescriptorDataShape{
+						InputDataShape: ConnectorDataShape{
 							Kind: "any",
 						},
-						OutputDataShape: ConnectorActionDescriptorDataShape{
+						OutputDataShape: ConnectorDataShape{
 							Kind: "none",
 						},
-						PropertyDefinitionSteps: []ConnectorActionDescriptorPropertyDefinitionStep{
+						PropertyDefinitionSteps: []ConnectorStep{
 							{
 								Description: "Specify AMQP destination properties, including Queue or Topic name",
 								Name:        "Select the AMQP Destination",
-								Properties: map[string]ConnectorActionDescriptorPropertyDefinitionStepProperties{
-									"DestinationName": ConnectorActionDescriptorPropertyDefinitionStepProperties{
+								Properties: map[string]ConnectorProperty{
+									"destinationName": ConnectorProperty{
 										ComponentProperty: false,
 										Deprecated:        false,
 										LabelHint:         "Name of the queue or topic to send data to.",
@@ -191,7 +210,7 @@ func newConnectionCreatePostBody(username, password, url, connectionName string)
 										Type:              "string",
 										Order:             1,
 									},
-									"DestinationType": ConnectorActionDescriptorPropertyDefinitionStepProperties{
+									"destinationType": ConnectorProperty{
 										ComponentProperty: false,
 										DefaultValue:      "queue",
 										Deprecated:        false,
@@ -204,7 +223,7 @@ func newConnectionCreatePostBody(username, password, url, connectionName string)
 										Secret:            false,
 										Type:              "string",
 										Order:             2,
-										Enum: []ConnectorActionDescriptorPropertyEnum{
+										Enum: []ConnectorEnum{
 											{
 												Label: "Topic",
 												Value: "topic",
@@ -215,7 +234,7 @@ func newConnectionCreatePostBody(username, password, url, connectionName string)
 											},
 										},
 									},
-									"DeliveryPersistent": ConnectorActionDescriptorPropertyDefinitionStepProperties{
+									"deliveryPersistent": ConnectorProperty{
 										ComponentProperty: false,
 										DefaultValue:      "true",
 										Deprecated:        false,
@@ -241,18 +260,18 @@ func newConnectionCreatePostBody(username, password, url, connectionName string)
 					Name:        "Subscribe for messages",
 					Description: "Receive data from the destination you specify.",
 					Descriptor: ConnectorActionDescriptor{
-						InputDataShape: ConnectorActionDescriptorDataShape{
+						InputDataShape: ConnectorDataShape{
 							Kind: "none",
 						},
-						OutputDataShape: ConnectorActionDescriptorDataShape{
+						OutputDataShape: ConnectorDataShape{
 							Kind: "any",
 						},
-						PropertyDefinitionSteps: []ConnectorActionDescriptorPropertyDefinitionStep{
+						PropertyDefinitionSteps: []ConnectorStep{
 							{
 								Description: "Specify AMQP destination properties, including Queue or Topic Name",
 								Name:        "Select the AMQP Destination",
-								Properties: map[string]ConnectorActionDescriptorPropertyDefinitionStepProperties{
-									"DestinationName": ConnectorActionDescriptorPropertyDefinitionStepProperties{
+								Properties: map[string]ConnectorProperty{
+									"destinationName": ConnectorProperty{
 										ComponentProperty: false,
 										Deprecated:        false,
 										LabelHint:         "Name of the queue or topic to receive data from.",
@@ -265,7 +284,7 @@ func newConnectionCreatePostBody(username, password, url, connectionName string)
 										Type:              "string",
 										Order:             1,
 									},
-									"DestinationType": ConnectorActionDescriptorPropertyDefinitionStepProperties{
+									"destinationType": ConnectorProperty{
 										ComponentProperty: false,
 										DefaultValue:      "queue",
 										Deprecated:        false,
@@ -278,7 +297,7 @@ func newConnectionCreatePostBody(username, password, url, connectionName string)
 										Secret:            false,
 										Type:              "string",
 										Order:             2,
-										Enum: []ConnectorActionDescriptorPropertyEnum{
+										Enum: []ConnectorEnum{
 											{
 												Label: "Topic",
 												Value: "topic",
@@ -289,7 +308,7 @@ func newConnectionCreatePostBody(username, password, url, connectionName string)
 											},
 										},
 									},
-									"DurableSubscriptionId": ConnectorActionDescriptorPropertyDefinitionStepProperties{
+									"durableSubscriptionId": ConnectorProperty{
 										ComponentProperty: false,
 										Deprecated:        false,
 										LabelHint:         "Set the ID that lets connections close and reopen with missing messages. Connection type must be a topic.",
@@ -303,7 +322,7 @@ func newConnectionCreatePostBody(username, password, url, connectionName string)
 										Type:              "string",
 										Order:             3,
 									},
-									"MessageSelector": ConnectorActionDescriptorPropertyDefinitionStepProperties{
+									"messageSelector": ConnectorProperty{
 										ComponentProperty: false,
 										Deprecated:        false,
 										LabelHint:         "Specify a filter expression to receive only data that meets certain criteria.",
@@ -328,18 +347,18 @@ func newConnectionCreatePostBody(username, password, url, connectionName string)
 					Name:        "Request response using messages",
 					Description: "Send data to the destination you specify and receive a response.",
 					Descriptor: ConnectorActionDescriptor{
-						InputDataShape: ConnectorActionDescriptorDataShape{
+						InputDataShape: ConnectorDataShape{
 							Kind: "any",
 						},
-						OutputDataShape: ConnectorActionDescriptorDataShape{
+						OutputDataShape: ConnectorDataShape{
 							Kind: "any",
 						},
-						PropertyDefinitionSteps: []ConnectorActionDescriptorPropertyDefinitionStep{
+						PropertyDefinitionSteps: []ConnectorStep{
 							{
 								Description: "Specify AMQP destination properties, including Queue or Topic Name",
 								Name:        "Select the AMQP Destination",
-								Properties: map[string]ConnectorActionDescriptorPropertyDefinitionStepProperties{
-									"DestinationName": ConnectorActionDescriptorPropertyDefinitionStepProperties{
+								Properties: map[string]ConnectorProperty{
+									"destinationName": ConnectorProperty{
 										ComponentProperty: false,
 										Deprecated:        false,
 										LabelHint:         "Name of the queue or topic to receive data from.",
@@ -352,7 +371,7 @@ func newConnectionCreatePostBody(username, password, url, connectionName string)
 										Type:              "string",
 										Order:             1,
 									},
-									"DestinationType": ConnectorActionDescriptorPropertyDefinitionStepProperties{
+									"destinationType": ConnectorProperty{
 										ComponentProperty: false,
 										DefaultValue:      "queue",
 										Deprecated:        false,
@@ -365,7 +384,7 @@ func newConnectionCreatePostBody(username, password, url, connectionName string)
 										Secret:            false,
 										Type:              "string",
 										Order:             2,
-										Enum: []ConnectorActionDescriptorPropertyEnum{
+										Enum: []ConnectorEnum{
 											{
 												Label: "Topic",
 												Value: "topic",
@@ -376,7 +395,7 @@ func newConnectionCreatePostBody(username, password, url, connectionName string)
 											},
 										},
 									},
-									"DurableSubscriptionId": ConnectorActionDescriptorPropertyDefinitionStepProperties{
+									"durableSubscriptionId": ConnectorProperty{
 										ComponentProperty: false,
 										Deprecated:        false,
 										LabelHint:         "Set the ID that lets connections close and reopen with missing messages. Connection type must be a topic.",
@@ -390,7 +409,7 @@ func newConnectionCreatePostBody(username, password, url, connectionName string)
 										Type:              "string",
 										Order:             3,
 									},
-									"MessageSelector": ConnectorActionDescriptorPropertyDefinitionStepProperties{
+									"messageSelector": ConnectorProperty{
 										ComponentProperty: false,
 										Deprecated:        false,
 										LabelHint:         "Specify a filter expression to receive only data that meets certain criteria.",
@@ -412,12 +431,155 @@ func newConnectionCreatePostBody(username, password, url, connectionName string)
 					Pattern:    "To",
 				},
 			},
+			Name: "AMQP Message Broker",
+			Properties: map[string]ConnectorProperty{
+				"connectionUri": ConnectorProperty{
+					ComponentProperty: true,
+					Deprecated:        false,
+					LabelHint:         "Location to send data to or obtain data from.",
+					DisplayName:       "Connection URI",
+					Group:             "common",
+					JavaType:          "java.lang.String",
+					Kind:              "property",
+					Label:             "common",
+					Required:          true,
+					Secret:            false,
+					Type:              "string",
+					Order:             1,
+				},
+				"username": ConnectorProperty{
+					ComponentProperty: true,
+					Deprecated:        false,
+					LabelHint:         "Access the broker with this user’s authorization credentials.",
+					DisplayName:       "User Name",
+					Group:             "security",
+					JavaType:          "java.lang.String",
+					Kind:              "property",
+					Label:             "common,security",
+					Required:          false,
+					Secret:            false,
+					Type:              "string",
+					Order:             2,
+				},
+				"password": ConnectorProperty{
+					ComponentProperty: true,
+					Deprecated:        false,
+					LabelHint:         "Password for the specified user account.",
+					DisplayName:       "Password",
+					Group:             "security",
+					JavaType:          "java.lang.String",
+					Kind:              "property",
+					Label:             "common,security",
+					Required:          false,
+					Secret:            true,
+					Type:              "string",
+					Order:             3,
+				},
+				"clientID": ConnectorProperty{
+					ComponentProperty: true,
+					Deprecated:        false,
+					LabelHint:         "Required for connections to close and reopen without missing messages. Connection destination must be a topic.",
+					DisplayName:       "Client ID",
+					Group:             "security",
+					JavaType:          "java.lang.String",
+					Kind:              "property",
+					Label:             "common,security",
+					Required:          false,
+					Secret:            false,
+					Type:              "string",
+					Order:             4,
+				},
+				"skipCertificateCheck": ConnectorProperty{
+					ComponentProperty: true,
+					DefaultValue:      "false",
+					Deprecated:        false,
+					LabelHint:         "Ensure certificate checks are enabled for secure production environments. Disable for convenience in only development environments.",
+					DisplayName:       "Check Certificates",
+					Group:             "security",
+					JavaType:          "java.lang.String",
+					Kind:              "property",
+					Label:             "common,security",
+					Required:          false,
+					Secret:            false,
+					Type:              "string",
+					Order:             5,
+					Enum: []ConnectorEnum{
+						{
+							Label: "Disable",
+							Value: "true",
+						},
+						{
+							Label: "Enable",
+							Value: "false",
+						},
+					},
+				},
+				"brokerCertificate": ConnectorProperty{
+					ComponentProperty: true,
+					Deprecated:        false,
+					Description:       "AMQ Broker X.509 PEM Certificate",
+					DisplayName:       "Broker Certificate",
+					Group:             "security",
+					JavaType:          "java.lang.String",
+					Kind:              "property",
+					Label:             "common,security",
+					Required:          false,
+					Secret:            false,
+					Type:              "textarea",
+					Order:             6,
+					Relation: []ConnectorPropertyRelation{
+						{
+							Action: "ENABLE",
+							When: []ConnectorPropertyEvent{
+								{
+									ID:    "skipCertificateCheck",
+									Value: "false",
+								},
+							},
+						},
+					},
+				},
+				"clientCertificate": ConnectorProperty{
+					ComponentProperty: true,
+					Deprecated:        false,
+					Description:       "AMQ Client X.509 PEM Certificate",
+					DisplayName:       "Client Certificate",
+					Group:             "security",
+					JavaType:          "java.lang.String",
+					Kind:              "property",
+					Label:             "common,security",
+					Required:          false,
+					Secret:            false,
+					Type:              "textarea",
+					Order:             7,
+					Relation: []ConnectorPropertyRelation{
+						{
+							Action: "ENABLE",
+							When: []ConnectorPropertyEvent{
+								{
+									ID:    "skipCertificateCheck",
+									Value: "false",
+								},
+							},
+						},
+					},
+				},
+			},
+			Dependencies: []ConnectorDependency{
+				{
+					Type: "MAVEN",
+					ID:   "io.syndesis.connector:connector-amqp:1.5-SNAPSHOT",
+				},
+			},
 		},
+		Icon:        "fa-amqp",
+		ConnectorID: "amqp",
 	}
 
 	bodyBytes, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
+
 	return bytes.NewBuffer(bodyBytes), nil
 }
