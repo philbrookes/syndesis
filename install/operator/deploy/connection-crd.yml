@@ -22,3 +22,5 @@ spec:
               type: string
             url:
               type: string
+            connectionType:
+              type: string

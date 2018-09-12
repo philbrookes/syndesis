@@ -94,7 +94,7 @@ func reconcileConfigMap(configmap *v1.ConfigMap, deleted bool) error {
 		return errors.New("failed to get messaging host from address-space")
 	}
 	msgHost += "?amqp.saslMechanisms=PLAIN"
-	conn.Spec = syndesis.ConnectionSpec{Password: kcUser.Password, URL: msgHost, Username: kcUser.UserName}
+	conn.Spec = syndesis.ConnectionSpec{ConnectionType: "amqp", Password: kcUser.Password, URL: msgHost, Username: kcUser.UserName}
 	if err := sdk.Create(&conn); err != nil {
 		return err
 	}

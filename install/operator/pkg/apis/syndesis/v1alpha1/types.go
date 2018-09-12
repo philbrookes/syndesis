@@ -22,9 +22,10 @@ type Connection struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ConnectionSpec struct {
-	Username string `json:"username,omitempty"`
-	Password string `json:"password,omitempty"`
-	URL      string `json:"url,omitempty"`
+	Username       string `json:"username,omitempty"`
+	Password       string `json:"password,omitempty"`
+	URL            string `json:"url,omitempty"`
+	ConnectionType string `json:"connectionType,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
