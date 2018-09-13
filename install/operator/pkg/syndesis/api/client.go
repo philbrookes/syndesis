@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 
 	glog "github.com/sirupsen/logrus"
@@ -30,7 +31,7 @@ type Connector struct {
 	Name             string                       `json:"name,omitempty"`
 	Icon             string                       `json:"icon"`
 	ComponentScheme  string                       `json:"componentScheme"`
-	ConnectorFactory string                       `json:"connectorFactory"`
+	ConnectorFactory string                       `json:"connectorFactory,omitempty"`
 	ID               string                       `json:"id"`
 	Version          int                          `json:"version"`
 	Dependencies     []ConnectorDependency        `json:"dependencies"`
@@ -67,7 +68,7 @@ type ConnectorStep struct {
 }
 
 type ConnectorProperty struct {
-	ComponentProperty bool                        `json:"componentProperty"`
+	ComponentProperty bool                        `json:"componentProperty,omitempty"`
 	Deprecated        bool                        `json:"deprecated"`
 	Description       string                      `json:"description,omitempty"`
 	LabelHint         string                      `json:"labelHint,omitempty"`
@@ -83,6 +84,7 @@ type ConnectorProperty struct {
 	Relation          []ConnectorPropertyRelation `json:"relation,omitempty"`
 	Enum              []ConnectorEnum             `json:"enum,omitempty"`
 	DefaultValue      string                      `json:"defaultValue,omitempty"`
+	PlaceHolder       string                      `json:"placeholder,omitempty"`
 }
 
 type ConnectorPropertyEvent struct {
@@ -99,6 +101,7 @@ type ConnectorActionDescriptor struct {
 	InputDataShape          ConnectorDataShape `json:"inputDataShape"`
 	OutputDataShape         ConnectorDataShape `json:"outputDataShape"`
 	PropertyDefinitionSteps []ConnectorStep    `json:"propertyDefinitionSteps"`
+	ConnectorFactory        string             `json:"connectorFactory,omitempty"`
 }
 
 type ConnectorDependency struct {
@@ -106,11 +109,12 @@ type ConnectorDependency struct {
 	ID   string `json:"id"`
 }
 type ConfiguredProperties struct {
-	ConnectionURI        string `json:"connectionUri"`
-	Username             string `json:"username"`
-	Password             string `json:"password"`
-	SkipCertificateCheck string `json:"skipCertificateCheck"`
+	ConnectionURI        string `json:"connectionUri,omitempty"`
+	Username             string `json:"username,omitempty"`
+	Password             string `json:"password,omitempty"`
+	SkipCertificateCheck string `json:"skipCertificateCheck,omitempty"`
 	BrokerCertificate    string `json:"brokerCertificate,omitempty"`
+	BaseURL              string `json:"baseUrl,omitempty"`
 }
 
 type SyndesisClient struct {
@@ -134,10 +138,23 @@ func NewClient(token, host, user, xsrfToken string, httpClient *http.Client) Cli
 func (c *SyndesisClient) CreateConnection(connection *v1alpha1.Connection) error {
 	glog.Infof("Creating connection")
 	apiHost := "http://" + c.host + "/api/v1/connections"
-	body, err := newConnectionCreatePostBody(connection.Spec.Username, connection.Spec.Password, connection.Spec.URL, connection.ObjectMeta.Name)
-	if err != nil {
-		return err
+	var body *bytes.Buffer
+	var err error
+	switch connection.Spec.ConnectionType {
+	case "amqp":
+		body, err = newAMQPConnectionCreatePostBody(connection.Spec.Username, connection.Spec.Password, connection.Spec.URL, connection.ObjectMeta.Name)
+		if err != nil {
+			return err
+		}
+	case "http":
+		body, err = newHTTPConnectionCreatePostBody(connection.Spec.URL, connection.ObjectMeta.Name)
+		if err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("unknown connection type '%s'", connection.Spec.ConnectionType)
 	}
+
 	req, err := http.NewRequest("POST", apiHost, body)
 	if err != nil {
 		return err
@@ -148,16 +165,255 @@ func (c *SyndesisClient) CreateConnection(connection *v1alpha1.Connection) error
 	req.Header.Set("SYNDESIS-XSRF-TOKEN", c.xsrfToken)
 	rsp, err := c.client.Do(req)
 	if err != nil {
+		rspBodyBytes, _ := ioutil.ReadAll(rsp.Body)
+		glog.Infof("response to bad create request:: %s", string(rspBodyBytes))
 		return err
 	}
+
 	defer rsp.Body.Close()
 	if rsp.StatusCode != 200 {
+		glog.Infof("request headers: %+v", req.Header)
+		bodyBytes, _ := ioutil.ReadAll(body)
+		glog.Infof("request body: %s", string(bodyBytes))
+		rspBodyBytes, _ := ioutil.ReadAll(rsp.Body)
+		glog.Infof("response to bad create request:: %s", string(rspBodyBytes))
 		return fmt.Errorf("error creating connection")
 	}
 	return nil
 }
 
-func newConnectionCreatePostBody(username, password, url, connectionName string) (*bytes.Buffer, error) {
+func newHTTPConnectionCreatePostBody(url, name string) (*bytes.Buffer, error) {
+	body := ConnectionCreatePost{
+		Connector: Connector{
+			Description:     "Invoke various HTTP methods.",
+			Icon:            "http",
+			ComponentScheme: "http4",
+			ActionsSummary: ConnectorActionsSummary{
+				TotalActions: 2,
+			},
+			Uses:    0,
+			ID:      "http4",
+			Version: 8,
+			Actions: []ConnectorAction{
+				{
+					ID:          "io.syndesis.connector:connector-http:http4-invoke-url",
+					Name:        "Invoke URL",
+					Description: "Invoke an http endpoint URL",
+					Descriptor: ConnectorActionDescriptor{
+						ConnectorFactory: "io.syndesis.connector.http.HttpConnectorFactories$Http4",
+						InputDataShape: ConnectorDataShape{
+							Kind: "any",
+						},
+						OutputDataShape: ConnectorDataShape{
+							Kind: "none",
+						},
+						PropertyDefinitionSteps: []ConnectorStep{
+							{
+								Description: "properties",
+								Name:        "properties",
+								Properties: map[string]ConnectorProperty{
+									"httpMethod": ConnectorProperty{
+										DefaultValue: "GET",
+										Deprecated:   false,
+										LabelHint:    "The specific http method to execute.",
+										DisplayName:  "Http Method",
+										Group:        "common",
+										JavaType:     "java.lang.String",
+										Kind:         "parameter",
+										Required:     false,
+										Secret:       false,
+										Type:         "string",
+										Enum: []ConnectorEnum{
+											{
+												Label: "GET",
+												Value: "GET",
+											},
+											{
+												Label: "PUT",
+												Value: "PUT",
+											},
+											{
+												Label: "POST",
+												Value: "POST",
+											},
+											{
+												Label: "DELETE",
+												Value: "DELETE",
+											},
+											{
+												Label: "HEAD",
+												Value: "HEAD",
+											},
+											{
+												Label: "OPTIONS",
+												Value: "OPTIONS",
+											},
+											{
+												Label: "TRACE",
+												Value: "TRACE",
+											},
+											{
+												Label: "PATCH",
+												Value: "PATCH",
+											},
+										},
+									},
+									"path": ConnectorProperty{
+										Deprecated:  false,
+										LabelHint:   "Endpoint Path (eg '/path/to/endpoint')",
+										DisplayName: "URL Path",
+										Group:       "common",
+										JavaType:    "java.lang.String",
+										Kind:        "parameter",
+										Required:    false,
+										Secret:      false,
+										Type:        "string",
+									},
+								},
+							},
+						},
+					},
+					ActionType: "connector",
+					Pattern:    "To",
+				},
+				{
+					ID:          "io.syndesis.connector:connector-http:http4-periodic-invoke-url",
+					Name:        "Periodic invoke URL",
+					Description: "Periodically invoke an http endpoint URL",
+					Descriptor: ConnectorActionDescriptor{
+						ConnectorFactory: "io.syndesis.connector.http.HttpConnectorFactories$Http4",
+						InputDataShape: ConnectorDataShape{
+							Kind: "none",
+						},
+						OutputDataShape: ConnectorDataShape{
+							Kind: "any",
+						},
+						PropertyDefinitionSteps: []ConnectorStep{
+							{
+								Description: "properties",
+								Name:        "properties",
+								Properties: map[string]ConnectorProperty{
+									"httpMethod": ConnectorProperty{
+										DefaultValue: "GET",
+										Deprecated:   false,
+										LabelHint:    "The specific http method to execute.",
+										DisplayName:  "Http Method",
+										Group:        "common",
+										JavaType:     "java.lang.String",
+										Kind:         "parameter",
+										Required:     false,
+										Secret:       false,
+										Type:         "string",
+										Enum: []ConnectorEnum{
+											{
+												Label: "GET",
+												Value: "GET",
+											},
+											{
+												Label: "PUT",
+												Value: "PUT",
+											},
+											{
+												Label: "POST",
+												Value: "POST",
+											},
+											{
+												Label: "DELETE",
+												Value: "DELETE",
+											},
+											{
+												Label: "HEAD",
+												Value: "HEAD",
+											},
+											{
+												Label: "OPTIONS",
+												Value: "OPTIONS",
+											},
+											{
+												Label: "TRACE",
+												Value: "TRACE",
+											},
+											{
+												Label: "PATCH",
+												Value: "PATCH",
+											},
+										},
+									},
+									"path": ConnectorProperty{
+										Deprecated:  false,
+										LabelHint:   "Endpoint Path",
+										PlaceHolder: "eg '/path/to/endpoint'",
+										DisplayName: "URL Path",
+										Group:       "common",
+										JavaType:    "java.lang.String",
+										Kind:        "parameter",
+										Required:    false,
+										Secret:      false,
+										Type:        "string",
+									},
+									"schedulerExpression": ConnectorProperty{
+										DefaultValue: "1000",
+										Deprecated:   false,
+										LabelHint:    "Delay in milliseconds between scheduling (executing).",
+										DisplayName:  "Period",
+										Group:        "consumer",
+										JavaType:     "long",
+										Kind:         "parameter",
+										Required:     false,
+										Secret:       false,
+										Type:         "duration",
+									},
+								},
+							},
+						},
+					},
+					ActionType: "connector",
+					Pattern:    "From",
+				},
+			},
+			Tags: []string{
+				"verifier",
+			},
+			Name: "HTTP",
+			Properties: map[string]ConnectorProperty{
+				"baseUrl": ConnectorProperty{
+					Deprecated:  false,
+					LabelHint:   "Base Http Endpoint URL",
+					PlaceHolder: "eg 'www.redhat.com'",
+					DisplayName: "Base URL",
+					Group:       "common",
+					JavaType:    "java.lang.String",
+					Kind:        "parameter",
+					Required:    true,
+					Secret:      false,
+					Type:        "string",
+				},
+			},
+			Dependencies: []ConnectorDependency{
+				{
+					Type: "MAVEN",
+					ID:   "io.syndesis.connector:connector-http:1.5-SNAPSHOT",
+				},
+			},
+		},
+		Icon:        "http",
+		ConnectorID: "http4",
+		ConfiguredProperties: ConfiguredProperties{
+			BaseURL: url,
+		},
+		Name:        name,
+		Description: "",
+	}
+
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+
+	return bytes.NewBuffer(bodyBytes), nil
+}
+
+func newAMQPConnectionCreatePostBody(username, password, url, connectionName string) (*bytes.Buffer, error) {
 	body := ConnectionCreatePost{
 		Name: connectionName,
 		ConfiguredProperties: ConfiguredProperties{
@@ -574,6 +830,7 @@ func newConnectionCreatePostBody(username, password, url, connectionName string)
 		},
 		Icon:        "fa-amqp",
 		ConnectorID: "amqp",
+		Description: "",
 	}
 
 	bodyBytes, err := json.Marshal(body)

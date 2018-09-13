@@ -71,6 +71,7 @@ func main() {
 	sdk.Watch(resource, kind, namespace, 10*time.Second)
 	if os.Getenv("ENABLE_ENMASSE") != "false" {
 		sdk.Watch("v1", "ConfigMap", namespace, 10*time.Second, sdk.WithLabelSelector("type=address-space"))
+		sdk.Watch("route.openshift.io/v1", "Route", namespace, 10*time.Second)
 	}
 	sdk.Handle(stub.NewHandler(SyndesisAPIClient))
 	sdk.Run(ctx)
