@@ -68,7 +68,7 @@ type ConnectorStep struct {
 }
 
 type ConnectorProperty struct {
-	ComponentProperty bool                        `json:"componentProperty,omitempty"`
+	ComponentProperty bool                        `json:"componentProperty"`
 	Deprecated        bool                        `json:"deprecated"`
 	Description       string                      `json:"description,omitempty"`
 	LabelHint         string                      `json:"labelHint,omitempty"`
@@ -142,11 +142,13 @@ func (c *SyndesisClient) CreateConnection(connection *v1alpha1.Connection) error
 	var err error
 	switch connection.Spec.ConnectionType {
 	case "amqp":
+		glog.Infof("creating new AMQP connection: %s", connection.Name)
 		body, err = newAMQPConnectionCreatePostBody(connection.Spec.Username, connection.Spec.Password, connection.Spec.URL, connection.ObjectMeta.Name)
 		if err != nil {
 			return err
 		}
 	case "http":
+		glog.Infof("creating new HTTP connection: %s", connection.Name)
 		body, err = newHTTPConnectionCreatePostBody(connection.Spec.URL, connection.ObjectMeta.Name)
 		if err != nil {
 			return err
