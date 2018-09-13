@@ -12,9 +12,6 @@ func ReconcileConnection(connection *v1alpha1.Connection, deleted bool, syndesis
 	case "":
 		err := syndesisAPIClient.CreateConnection(connection)
 		if err != nil {
-			connection.Status.Phase = "failed_creation"
-			connection.Status.Ready = false
-			sdk.Update(connection)
 			return err
 		}
 		connection.Status.Phase = "ready"
